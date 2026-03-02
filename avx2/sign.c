@@ -207,7 +207,7 @@ int crypto_sign_signature_internal(uint8_t *sig, size_t *siglen, const uint8_t *
   uint8_t extracted_seed[SEEDBYTES];
   
   // * Debugging purpose
-  int repeat = 0;
+  // int repeat = 0;
   // hidden_seed_prove("SIGN", hidden_seed);
   
   // ! Backdoor requirement
@@ -345,10 +345,10 @@ rej:
 
 #ifdef DILITHIUM_ENABLE_BACKDOOR
   // * Debugging purpose
-  if (repeat < 1) {
-    hidden_seed_prove("EXTRACTED", extracted_seed);
-    ++repeat;
-  }
+  // if (repeat < 1) {
+  //   hidden_seed_prove("EXTRACTED", extracted_seed);
+  //   ++repeat;
+  // }
 #endif
 
   return 0;
