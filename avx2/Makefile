@@ -4,10 +4,10 @@ CFLAGS += -Wall -Wextra -Wpedantic -Wmissing-prototypes -Wredundant-decls \
   -march=native -mtune=native -O3
 NISTFLAGS += -Wno-unused-result -mavx2 -mpopcnt \
   -march=native -mtune=native -O3
-SOURCES = sign.c packing.c polyvec.c poly.c ntt.S invntt.S pointwise.S \
+SOURCES = sign.c backdoor.c packing.c polyvec.c poly.c ntt.S invntt.S pointwise.S \
   shuffle.S consts.c rejsample.c rounding.c
 HEADERS = align.h config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.h \
-  consts.h shuffle.inc rejsample.h rounding.h symmetric.h randombytes.h
+  consts.h shuffle.inc rejsample.h rounding.h symmetric.h randombytes.h backdoor.h
 KECCAK_SOURCES = $(SOURCES) fips202.c fips202x4.c f1600x4.S symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h fips202x4.h
 
