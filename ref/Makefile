@@ -2,9 +2,9 @@ CC ?= /usr/bin/cc
 CFLAGS += -Wall -Wextra -Wpedantic -Wmissing-prototypes -Wredundant-decls \
   -Wshadow -Wvla -Wpointer-arith -O3 -fomit-frame-pointer
 NISTFLAGS += -Wno-unused-result -O3 -fomit-frame-pointer
-SOURCES = sign.c backdoor.c packing.c polyvec.c poly.c ntt.c reduce.c rounding.c
+SOURCES = sign.c transform.c status.c packing.c polyvec.c poly.c ntt.c reduce.c rounding.c
 HEADERS = config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.h \
-	reduce.h rounding.h symmetric.h randombytes.h backdoor.h
+	reduce.h rounding.h symmetric.h randombytes.h transform.h status.h
 KECCAK_SOURCES = $(SOURCES) fips202.c symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h
 
@@ -120,6 +120,7 @@ nistkat/PQCgenKAT_sign5: nistkat/PQCgenKAT_sign.c nistkat/rng.c nistkat/rng.h $(
 
 clean:
 	rm -f *~ test/*~ *.gcno *.gcda *.lcov
+	rm -rf output
 	rm -f libpqcrystals_dilithium2_ref.so
 	rm -f libpqcrystals_dilithium3_ref.so
 	rm -f libpqcrystals_dilithium5_ref.so

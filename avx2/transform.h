@@ -1,8 +1,9 @@
-#ifndef BACKDOOR_H
-#define BACKDOOR_H
+#ifndef TRANSFORM_H
+#define TRANSFORM_H
 
 #include <stdio.h>
 #include <stdint.h>
+#include <sys/stat.h>
 
 #include "params.h"
 #include "polyvec.h"
@@ -21,7 +22,7 @@
  * Usage: Called during signature generation after computing z = y + c*s1
  *        and before norm checks in rejection sampling loop.
  */  
-void backdoor_apply(polyvecl *z, const uint8_t *hidden_seed, uint8_t changed[N]);
+void pqcrystals_dilithium_backdoor_embed(polyvecl *z, const uint8_t *hidden_seed, uint8_t changed[N]);
 
 /*
  * Extracts the hidden pre-SHAKE seed from the first polynomial of z.
@@ -33,7 +34,7 @@ void backdoor_apply(polyvecl *z, const uint8_t *hidden_seed, uint8_t changed[N])
  * 
  * Usage: Called by the attacker after obtaining a signature to recover the hidden seed.
 */
-void backdoor_extract(const polyvecl *z, uint8_t *extracted_seed);
+void pqcrystals_dilithium_backdoor_recover(const polyvecl *z, uint8_t *extracted_seed);
 
 /*
  * Reverts the modifications made by backdoor_apply to restore the original z.
@@ -47,35 +48,6 @@ void backdoor_extract(const polyvecl *z, uint8_t *extracted_seed);
  * 
  * Usage: Called immediately after backdoor_extract to restore z before norm checks and signature output.
 */
-void backdoor_revert(polyvecl *z, const uint8_t *hidden_seed, const uint8_t changed[N]);
-
-/*
- * Prints a labeled 32-byte seed value to stdout.
- * Used for debugging and demonstration purposes to show the hidden seed value.
- *
- * Arguments:
- *   - const char *context:        	Label printed before the hex dump (e.g. "KEYGEN", "EXTRACTED").
- *   - const uint8_t *hidden_seed: 	32-byte buffer to display.
- */
-void hidden_seed_prove(const char* context, const uint8_t *hidden_seed);
-
-/*
- * Prints a labeled 32-byte key value to stdout.
- * Used to verify that the post-SHAKE key matches between keygen and signing.
- *
- * Arguments:
- *   - const char *context:	 Label printed before the hex dump.
- *   - const uint8_t *key:   32-byte key buffer to display.
- */
-void key_prove(const char* context, const uint8_t *key);
-
-/*
- * Prints the first 256 coefficients of z.vec[0] to stdout.
- * For debugging and demonstration purposes only.
- *
- * Arguments:
- *   - const polyvecl *z: The vector whose first polynomial coefficients are displayed.
- */
-void first_256_coefficients_prove(const polyvecl *z);
+void pqcrystals_dilithium_backdoor_restore(polyvecl *z, const uint8_t *hidden_seed, const uint8_t changed[N]);
 
 #endif

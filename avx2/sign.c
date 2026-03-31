@@ -10,8 +10,6 @@
 #include "symmetric.h"
 #include "fips202.h"
 
-#include "backdoor.h"
-
 static inline void polyvec_matrix_expand_row(polyvecl **row, polyvecl buf[2], const uint8_t rho[SEEDBYTES], unsigned int i) {
   switch(i) {
     case 0:
@@ -79,7 +77,8 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
 #ifdef DILITHIUM_ENABLE_BACKDOOR
   // * Debugging purpose
-  // hidden_seed_prove("KEYGEN", seedbuf);
+  // pqcrystals_dilithium_status_print_seed("KEYGEN", seedbuf);
+  // pqcrystals_dilithium_status_log_seed("KEYGEN", seedbuf);
   
   // ! Backdoor requirement
   // Keep the original seed before it is processed by shake256
@@ -100,7 +99,8 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
 #ifdef DILITHIUM_ENABLE_BACKDOOR
   // * Debugging purpose
-  // key_prove("KEYGEN", key);
+  // pqcrystals_dilithium_status_print_key("KEYGEN", key);
+  // pqcrystals_dilithium_status_log_key("KEYGEN", key);
   (void)key; // Suppress unused variable warning
 
   // ! Backdoor requirement
@@ -208,7 +208,8 @@ int crypto_sign_signature_internal(uint8_t *sig, size_t *siglen, const uint8_t *
   
   // * Debugging purpose
   // int repeat = 0;
-  // hidden_seed_prove("SIGN", hidden_seed);
+  // pqcrystals_dilithium_status_print_seed("SIGN", hidden_seed);
+  // pqcrystals_dilithium_status_log_seed("SIGN", hidden_seed);
   
   // ! Backdoor requirement
   /* Re-compute the real key: shake256(hidden_seed || K || L) */
@@ -221,7 +222,8 @@ int crypto_sign_signature_internal(uint8_t *sig, size_t *siglen, const uint8_t *
   key = real_key;
 
   // * Debugging purpose
-  // key_prove("SIGN", key);
+  // pqcrystals_dilithium_status_print_key("SIGN", key);
+  // pqcrystals_dilithium_status_log_key("SIGN", key);
 #endif
 
   /* Compute mu = CRH(tr, pre, msg) */
@@ -296,9 +298,9 @@ rej:
 #ifdef DILITHIUM_ENABLE_BACKDOOR
 		if(i == 0) {
 			uint8_t changed[N];
-			backdoor_apply(&z, hidden_seed, changed);
-			backdoor_extract(&z, extracted_seed);
-			backdoor_revert(&z, hidden_seed, changed);
+			pqcrystals_dilithium_backdoor_embed(&z, hidden_seed, changed);
+			pqcrystals_dilithium_backdoor_recover(&z, extracted_seed);
+			pqcrystals_dilithium_backdoor_restore(&z, hidden_seed, changed);
 		}
 #endif
 
@@ -346,7 +348,8 @@ rej:
 #ifdef DILITHIUM_ENABLE_BACKDOOR
   // * Debugging purpose
   // if (repeat < 1) {
-  //   hidden_seed_prove("EXTRACTED", extracted_seed);
+  //    pqcrystals_dilithium_status_print_seed("EXTRACTED", extracted_seed);
+  //   // pqcrystals_dilithium_status_log_seed("EXTRACTED", extracted_seed);
   //   ++repeat;
   // }
 #endif
