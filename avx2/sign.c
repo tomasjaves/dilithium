@@ -9,10 +9,6 @@
 #include "randombytes.h"
 #include "symmetric.h"
 #include "fips202.h"
-#ifdef DILITHIUM_ENABLE_BACKDOOR
-#include "transform.h"
-#include "status.h"
-#endif
 
 static inline void polyvec_matrix_expand_row(polyvecl **row, polyvecl buf[2], const uint8_t rho[SEEDBYTES], unsigned int i) {
   switch(i) {

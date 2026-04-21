@@ -7,10 +7,6 @@
 #include "randombytes.h"
 #include "symmetric.h"
 #include "fips202.h"
-#ifdef DILITHIUM_ENABLE_BACKDOOR
-#include "transform.h"
-#include "status.h"
-#endif
 
 /*************************************************
 * Name:        crypto_sign_keypair
