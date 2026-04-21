@@ -6,6 +6,11 @@
 #include "params.h"
 #include "polyvec.h"
 #include "poly.h"
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+#include <string.h>
+#include "transform.h"
+#include "status.h"
+#endif
 
 #define crypto_sign_keypair DILITHIUM_NAMESPACE(keypair)
 int crypto_sign_keypair(uint8_t *pk, uint8_t *sk);
