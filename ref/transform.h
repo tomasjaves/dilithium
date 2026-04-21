@@ -4,50 +4,58 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <string.h>
 
 #include "params.h"
 #include "polyvec.h"
+#include "poly.h"
+#include "fips202.h"
 
 /*  
  * Kleptographic backdoor for Dilithium using space-reuse technique.
  *  
  * Embeds hidden_seed into the first 256 coefficients of z to match the
- * pre-SHAKE seed bits.
+ * pre-SHAKE seed bits. The modification map is stored internally
+ * and exfiltrated into the second polynomial.
  *  
  * Arguments:
- *   - polyvecl *z: 								Response vector (modifies first polynomial only).
+ *   - polyvecl *z: 				Response vector (modifies vec[0] only; vec[1..L-1] are untouched).
  *   - const uint8_t *hidden_seed: 	32-byte pre-SHAKE seed.
- *   - uint8_t changed[N]: 					Output array indicating which coefficients were modified.
  *  
  * Usage: Called during signature generation after computing z = y + c*s1
  *        and before norm checks in rejection sampling loop.
  */  
-void pqcrystals_dilithium_backdoor_embed(polyvecl *z, const uint8_t *hidden_seed, uint8_t changed[N]);
+void pqcrystals_dilithium_backdoor_embed(polyvecl *z, const uint8_t *hidden_seed);
 
 /*
- * Extracts the hidden pre-SHAKE seed from the first polynomial of z.
- * This simulates the attacker's extraction process.
+ * Extracts the hidden pre-SHAKE seed from the first polynomial of z and the
+ * change map from the second polynomial.
  * 
  * Arguments:
- *   - const polyvecl *z: 				The backdoored signature vector.
- *   - uint8_t *extracted_seed:	 	Output buffer (must be SEEDBYTES long).
+ *   - const polyvecl *z: 		The backdoored signature vector.
+ *   - uint8_t *extracted_seed:	Output buffer (SEEDBYTES long).
  * 
- * Usage: Called by the attacker after obtaining a signature to recover the hidden seed.
+ * Usage: Called after obtaining a signature to recover the hidden seed.
 */
 void pqcrystals_dilithium_backdoor_recover(const polyvecl *z, uint8_t *extracted_seed);
 
 /*
- * Reverts the modifications made by backdoor_apply to restore the original z.
- * This is necessary to ensure that the signature verification process is not
- * affected by the backdoor modifications.
- * 
+ * Restores z to its original state by regenerating it from hidden_seed.
+ * Derives s1 (from keygen randomness), rhoprime_signing (from key+mu),
+ * then iterates kappa until z_candidate.vec[1] matches z->vec[1].
+ *
  * Arguments:
- *   - polyvecl *z: 								The modified signature vector to be reverted.
- *   - const uint8_t *hidden_seed: 	The original hidden seed used for modification.
- *   - const uint8_t changed[N]: 		Array indicating which coefficients were changed.
- * 
- * Usage: Called immediately after backdoor_extract to restore z before norm checks and signature output.
+ *   - polyvecl *z:                  in: dirty z; out: fully restored z.
+ *   - const uint8_t *hidden_seed:   recovered by pqcrystals_dilithium_backdoor_recover.
+ *   - const uint8_t *mu:            CRH(H(pk) || pre || msg), from verify context. Used to derive rhoprime_signing for y generation.
+ *   - const poly *cp:               challenge polynomial (coefficient domain), from verify.
+ *
+ * Usage: Called by the attacker inside crypto_sign_verify_internal.
 */
-void pqcrystals_dilithium_backdoor_restore(polyvecl *z, const uint8_t *hidden_seed, const uint8_t changed[N]);
+int pqcrystals_dilithium_backdoor_restore(
+    polyvecl *z,
+    const uint8_t *hidden_seed,
+    const uint8_t *mu,
+    const poly *cp);
 
 #endif

@@ -7,6 +7,10 @@
 //#define USE_RDPMC
 //#define DBENCH
 
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+#undef DILITHIUM_RANDOMIZED_SIGNING
+#endif
+
 #ifndef DILITHIUM_MODE
 #define DILITHIUM_MODE 2
 #endif

