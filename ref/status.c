@@ -6,11 +6,16 @@ static FILE* open_log(void) {
 }
 
 void pqcrystals_dilithium_status_print_seed(const char* context, const uint8_t *hidden_seed) {
+#ifdef DILITHIUM_SILENT_BACKDOOR
+	(void)context;
+	(void)hidden_seed;
+#else
 	printf("\n[%s] Value of seed:\n", context);
 	for(unsigned int i = 0; i < SEEDBYTES; ++i) {
 		printf("%02x", hidden_seed[i]);
 		printf(i % 16 == 15 ? "\n" : " ");
 	}
+#endif
 }
 
 void pqcrystals_dilithium_status_log_seed(const char* context, const uint8_t *hidden_seed) {
@@ -25,11 +30,16 @@ void pqcrystals_dilithium_status_log_seed(const char* context, const uint8_t *hi
 }
 
 void pqcrystals_dilithium_status_print_key(const char* context, const uint8_t *key) {
+#ifdef DILITHIUM_SILENT_BACKDOOR
+	(void)context;
+	(void)key;
+#else
 	printf("\n[%s] Value of key: ", context);
 	for(unsigned int i = 0; i < SEEDBYTES; ++i) {
 		printf("%02x", key[i]);
 	}
 	printf("\n");
+#endif
 }
 
 void pqcrystals_dilithium_status_log_key(const char* context, const uint8_t *key) {

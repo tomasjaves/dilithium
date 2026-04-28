@@ -11,7 +11,7 @@ HEADERS = align.h config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.
 KECCAK_SOURCES = $(SOURCES) fips202.c fips202x4.c f1600x4.S symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h fips202x4.h
 
-.PHONY: all shared clean
+.PHONY: all shared bench bench-clean clean
 
 all: \
   test/test_dilithium2 \
@@ -26,6 +26,12 @@ speed: \
   test/test_speed2 \
   test/test_speed3 \
   test/test_speed5 \
+
+BENCH_BD   = bench/bench2_bd   bench/bench3_bd   bench/bench5_bd
+BENCH_NOBD = bench/bench2_nobd bench/bench3_nobd bench/bench5_nobd
+BENCH_DEPS = ../benchmarks/bench.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+
+bench: $(BENCH_BD) $(BENCH_NOBD)
 
 shared: \
   libpqcrystals_dilithium2_avx2.so \
@@ -104,7 +110,26 @@ test/test_mul: test/test_mul.c randombytes.c $(KECCAK_SOURCES) \
   $(KECCAK_HEADERS)
 	$(CC) $(CFLAGS) -UDBENCH -o $@ $< randombytes.c $(KECCAK_SOURCES)
 
-clean:
+# --- Benchmark binaries (TFG: con/sin puerta trasera) ---------------------
+# Static pattern rules: explicit target lists eliminate any pattern ambiguity
+# between *_bd and *_nobd suffixes.
+#   _bd:    backdoor enabled (default config.h)
+#   _nobd:  backdoor disabled via -DDILITHIUM_DISABLE_BACKDOOR
+# Both pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
+
+$(BENCH_BD): bench/bench%_bd: $(BENCH_DEPS)
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+$(BENCH_NOBD): bench/bench%_nobd: $(BENCH_DEPS)
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_DISABLE_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+bench-clean:
+	rm -rf bench
+# --- end benchmark binaries -----------------------------------------------
+
+clean: bench-clean
 	rm -f *.o *.a *.so
 	rm -rf output
 	rm -f test/test_dilithium2
