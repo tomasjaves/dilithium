@@ -1,0 +1,15 @@
+metric,value
+alg,Dilithium2
+backdoor,0
+ntests,10000
+pk_bytes,1312
+sk_bytes,2560
+sig_bytes,2420
+keygen_ok,10000
+keygen_fail,0
+sign_ok,10000
+sign_fail,0
+verify_ok,10000
+verify_fail,0
+peak_rss_kb,1216
+wall_time_ns,1695850538

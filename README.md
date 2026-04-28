@@ -1,81 +1,94 @@
-# Dilithium
+# Dilithium - Kleptographic Backdoor Implementation
 
-[![Build Status](https://travis-ci.org/pq-crystals/dilithium.svg?branch=master)](https://travis-ci.org/pq-crystals/dilithium) [![Coverage Status](https://coveralls.io/repos/github/pq-crystals/dilithium/badge.svg?branch=master)](https://coveralls.io/github/pq-crystals/dilithium?branch=master)
+This repository contains a C implementation of the **Dilithium** signature scheme (standardized as [FIPS 204](https://csrc.nist.gov/pubs/fips/204/final)), modified to include a **Kleptographic Backdoor**. This project has been developed as part of a Bachelor's Thesis (TFG).
 
-This repository contains the official reference implementation of the [Dilithium](https://www.pq-crystals.org/dilithium/) signature scheme, and an optimized implementation for x86 CPUs supporting the AVX2 instruction set. Dilithium is standardized as [FIPS 204](https://csrc.nist.gov/pubs/fips/204/final).
+The reference implementation (`ref/`) and the AVX2-optimized implementation (`avx2/`) have been modified to demonstrate how a stealthy kleptographic attack can be embedded into the signing process to exfiltrate the secret key seed, while maintaining the mathematical validity of the signatures.
 
-## Build instructions
+---
 
-The implementations contain several test and benchmarking programs and a Makefile to facilitate compilation.
+## 1. Abstract
 
-### Prerequisites
+This project focuses on the analysis and implementation of a kleptographic attack on Dilithium, a lattice-based post-quantum signature scheme. The attack modifies the signature generation procedure so that the generated signatures leak information about the underlying secret seed without corrupting the standard verification process.
 
-Some of the test programs require [OpenSSL](https://openssl.org). If the OpenSSL header files and/or shared libraries do not lie in one of the standard locations on your system, it is necessary to specify their location via compiler and linker flags in the environment variables `CFLAGS`, `NISTFLAGS`, and `LDFLAGS`.
+## 2. Introduction to the Attack
 
-For example, on macOS you can install OpenSSL via [Homebrew](https://brew.sh) by running
-```sh
-brew install openssl
-```
-Then, run
-```sh
-export CFLAGS="-I/opt/homebrew/opt/openssl@1.1/include"
-export NISTFLAGS="-I/opt/homebrew/opt/openssl@1.1/include"
-export LDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib"
-```
-before compilation to add the OpenSSL header and library locations to the respective search paths.
+A kleptographic attack allows an adversary to secretly extract cryptographic keys through an apparently secure communication channel. In the context of Dilithium, the attack works as follows:
 
-### Test programs
+1. **Seed Exfiltration (During Signing):** The signature generation process is manipulated right after computing the signature vector `z`. The algorithm directly modifies the least significant bits of the first polynomial in `z` (`z->vec[0]`) to encode the bits of the secret `seed`.
+2. **Recovery (By the Attacker):** An attacker intercepting the signature can easily extract the hidden bits directly from the manipulated vector `z` and fully recover the original `seed`, effectively compromising the signer's secret key.
+3. **Signature Restoration (To Pass Verification):** If a signature is manipulated, it would normally fail the standard verification. To prevent this, the attacker uses an internal `restore` function before the actual verification step. Using the recovered `seed`, the attacker re-derives the private key elements (like `s1` and `rho'`). Then, it iterates through possible values of the counter `kappa` (the nonce) to perfectly reconstruct the original masking vector `y`. With the correct `y`, the honest `z` is recomputed and matched against the untouched parts of the transmitted `z`. Once a match is found, the manipulated parts of `z` are restored to their original honest values, allowing the standard verification to succeed as if nothing had happened.
 
-To compile the test programs on Linux or macOS, go to the `ref/` or `avx2/` directory and run
-```sh
+> **Note:** When the backdoor is enabled, Dilithium operates in deterministic mode (disabling `DILITHIUM_RANDOMIZED_SIGNING`) to ensure the attack's stability.
+
+## 3. Compilation and Usage
+
+### Requirements
+- A Linux environment (or WSL on Windows).
+- `make`, `gcc`.
+- `python3` and `pip` (for benchmarking analysis).
+
+### Compilation
+To compile the standalone test programs for either the `ref` or `avx2` implementation:
+```bash
+cd ref  # or cd avx2
 make
 ```
-This produces the executables
-```sh
-test/test_dilithium$ALG
-test/test_vectors$ALG
+This will produce the standard test binaries such as `test_dilithium2`. 
+
+**Compilation Flags:**
+The backdoor is **enabled by default**. To compile the binaries without the backdoor (for comparison purposes), you can inject the flag via the `CFLAGS` environment variable before running `make`:
+
+```bash
+# Disable the backdoor
+CFLAGS="-DDILITHIUM_DISABLE_BACKDOOR" make
+
+# Silence the backdoor status output (useful for benchmarking)
+CFLAGS="-DDILITHIUM_SILENT_BACKDOOR" make
 ```
-where `$ALG` ranges over the parameter sets 2, 3, and 5.
 
-* `test_dilithium$ALG` tests 10000 times to generate keys, sign a random message of 59 bytes and verify the produced signature. Also, the program will try to verify wrong signatures where a single random byte of a valid signature was randomly distorted. The program will abort with an error message and return -1 if there was an error. Otherwise it will output the key and signature sizes and return 0.
-* `test_vectors$ALG` performs further tests of internal functions and prints deterministically generated test vectors for several intermediate values that occur in the Dilithium algorithms. Namely, a 48 byte seed, the matrix A corresponding to the first 32 bytes of seed, a short secret vector s corresponding to the first 32 bytes of seed and nonce 0, a masking vector y corresponding to the seed and nonce 0, the high bits w1 and the low bits w0 of the vector w = Ay, the power-of-two rounding t1 of w and the corresponding low part t0, and the challenge c for the seed and w1. This program is meant to help to ensure compatibility of independent implementations.
+*Alternatively, you can permanently disable it by commenting out `#define DILITHIUM_ENABLE_BACKDOOR` inside `ref/config.h` and `avx2/config.h`.*
 
-### Benchmarking programs
+## 4. Benchmarking
 
-For benchmarking the implementations, we provide speed test programs for x86 CPUs that use the Time Step Counter (TSC) or the actual cycle counter provided by the Performance Measurement Counters (PMC) to measure performance. To compile the programs run
-```sh
-make speed
+This repository includes an automated benchmarking suite designed to measure the impact of the backdoor across all security levels (Dilithium 2, 3, and 5) and implementations (AVX2 and Reference).
+
+### Running the Benchmarks and Generating Plots
+A shell script orchestrates the compilation and execution of 12 different benchmark binaries (10,000 iterations each). To run the full suite and immediately process the raw data into human-readable statistics and plots, execute:
+
+```bash
+./benchmarks/run_all.sh
 ```
-This produces the executables
-```sh
-test/test_speed$ALG
-```
-for all parameter sets `$ALG` as above. The programs report the median and average cycle counts of 10000 executions of various internal functions and the API functions for key generation, signing and verification. By default the Time Step Counter is used. If instead you want to obtain the actual cycle counts from the Performance Measurement Counters export `CFLAGS="-DUSE_RDPMC"` before compilation.
 
-Please note that the reference implementation in `ref/` is not optimized for any platform, and, since it prioritises clean code, is significantly slower than a trivially optimized but still platform-independent implementation. Hence benchmarking the reference code does not provide representative results.
+After the script finishes, you need to install the Python dependencies for the analysis tools. Execute the following command:
 
-Our Dilithium implementations are contained in the [SUPERCOP](https://bench.cr.yp.to) benchmarking framework. See [here](http://bench.cr.yp.to/results-sign.html#amd64-kizomba) for current cycle counts on an Intel KabyLake CPU.
+```bash
+pip3 install -r benchmarks/analysis/requirements.txt
+```
 
-## Randomized signing
+Finally, generate the statistics and plots with:
 
-By default our code implements Dilithium's hedged signing mode. To change this to the deterministic signing mode, undefine the `DILITHIUM_RANDOMIZED_SIGNING` preprocessor macro at compilation by either commenting the line
-```sh
-#define DILITHIUM_RANDOMIZED_SIGNING
+```bash
+python3 benchmarks/analysis/plots.py
 ```
-in config.h, or adding `-UDILITHIUM_RANDOMIZED_SIGNING` to the compiler flags in the environment variable `CFLAGS`.
 
-## Shared libraries
+#### Intermediate Benchmark Binaries (`ref/bench/` and `avx2/bench/`)
+When the script is executed, it automatically triggers a compilation process that generates a `bench/` directory inside both `ref/` and `avx2/`. These directories contain the isolated, standalone C binaries used to perform the measurements:
+- `bench2_bd`, `bench3_bd`, `bench5_bd`: Binaries compiled **with** the kleptographic backdoor enabled for Dilithium modes 2, 3, and 5.
+- `bench2_nobd`, `bench3_nobd`, `bench5_nobd`: Binaries compiled **without** the backdoor (using `-DDILITHIUM_DISABLE_BACKDOOR`) to serve as the control group.
 
-All implementations can be compiled into shared libraries by running
-```sh
-make shared
-```
-For example in the directory `ref/` of the reference implementation, this produces the libraries
-```sh
-libpqcrystals_dilithium$ALG_ref.so
-```
-for all parameter sets `$ALG`, and the required symmetric crypto library
-```
-libpqcrystals_fips202_ref.so
-```
-All global symbols in the libraries lie in the namespaces `pqcrystals_dilithium$ALG_ref` and `libpqcrystals_fips202_ref`. Hence it is possible to link a program against all libraries simultaneously and obtain access to all implementations for all parameter sets. The corresponding API header file is `ref/api.h`, which contains prototypes for all API functions and preprocessor defines for the key and signature lengths.
+These binaries internally execute 10,000 iterations measuring cycles, timing, and memory, outputting the raw CSV files that are later consumed by the Python script.
+
+#### Raw Results Data (`benchmarks/results/`)
+After the script finishes, the raw measurements are saved here. The script creates a hierarchical folder structure corresponding to the implementation, security mode, and backdoor presence (e.g., `benchmarks/results/avx2/Dilithium5/with_bd/`). 
+
+Inside each of these specific directories, you will find four files:
+- `keygen.csv`, `sign.csv`, `verify.csv`: The raw benchmark data for each phase containing 10,000 rows (one per iteration) with the exact CPU cycles, timing in nanoseconds, and Peak RSS memory in KB.
+- `summary.csv`: A high-level overview generated by the C binary summarizing the mean metrics of that specific run.
+
+#### Output of the Analysis (`benchmarks/analysis/`):
+1. **`stats.csv`**: A comprehensive table containing the mean, median, standard deviation, and 95% Confidence Intervals (CI) for cycles, time (ms), and peak memory consumption (Peak RSS in KB), aggregated across all phases (KeyGen, Sign, Verify).
+2. **`plots/` directory**:
+   - `bar_total_time_ms.png`: A bar chart comparing the **total execution time** (KeyGen + Sign + Verify) per full iteration.
+   - `bar_cycles.png` & `bar_time_ms.png`: Bar charts showing the average cycles and time separated by phase. The impact of the backdoor is clearly identifiable here: KeyGen remains unaltered (any variance is OS noise), Sign shows a very slight overhead due to the bitwise `embed` injection, and Verify shows a prominent overhead due to the computationally heavy `restore` process over `kappa`.
+   - `bar_rss_kb.png`: A grouped bar chart comparing the Peak RSS (maximum RAM consumed), verifying empirically that the backdoor operates without causing suspicious memory spikes.
+   - `box_<impl>_D<mode>_<metric>.png`: Boxplots visualizing the statistical distribution and variance of the execution cycles for each mode, allowing you to observe the exact impact of the attack's mathematical operations.

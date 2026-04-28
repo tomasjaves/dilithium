@@ -8,7 +8,7 @@ HEADERS = config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.h \
 KECCAK_SOURCES = $(SOURCES) fips202.c symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h
 
-.PHONY: all speed shared clean
+.PHONY: all speed shared bench bench-clean clean
 
 all: \
   test/test_dilithium2 \
@@ -28,6 +28,12 @@ speed: \
   test/test_speed2 \
   test/test_speed3 \
   test/test_speed5 \
+
+BENCH_BD   = bench/bench2_bd   bench/bench3_bd   bench/bench5_bd
+BENCH_NOBD = bench/bench2_nobd bench/bench3_nobd bench/bench5_nobd
+BENCH_DEPS = ../benchmarks/bench.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+
+bench: $(BENCH_BD) $(BENCH_NOBD)
 
 shared: \
   libpqcrystals_dilithium2_ref.so \
@@ -103,6 +109,25 @@ test/test_speed5: test/test_speed.c test/speed_print.c test/speed_print.h \
 test/test_mul: test/test_mul.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
 	$(CC) $(CFLAGS) -UDBENCH -o $@ $< randombytes.c $(KECCAK_SOURCES)
 
+# --- Benchmark binaries (TFG: con/sin puerta trasera) ---------------------
+# Static pattern rules: explicit target lists eliminate any pattern ambiguity
+# between *_bd and *_nobd suffixes.
+#   _bd:    backdoor enabled (default config.h)
+#   _nobd:  backdoor disabled via -DDILITHIUM_DISABLE_BACKDOOR
+# Both pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
+
+$(BENCH_BD): bench/bench%_bd: $(BENCH_DEPS)
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+$(BENCH_NOBD): bench/bench%_nobd: $(BENCH_DEPS)
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_DISABLE_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+bench-clean:
+	rm -rf bench
+# --- end benchmark binaries -----------------------------------------------
+
 nistkat/PQCgenKAT_sign2: nistkat/PQCgenKAT_sign.c nistkat/rng.c nistkat/rng.h $(KECCAK_SOURCES) \
   $(KECCAK_HEADERS)
 	$(CC) $(NISTFLAGS) -DDILITHIUM_MODE=2 \
@@ -118,7 +143,7 @@ nistkat/PQCgenKAT_sign5: nistkat/PQCgenKAT_sign.c nistkat/rng.c nistkat/rng.h $(
 	$(CC) $(NISTFLAGS) -DDILITHIUM_MODE=5 \
 	  -o $@ $< nistkat/rng.c $(KECCAK_SOURCES) $(LDFLAGS) -lcrypto
 
-clean:
+clean: bench-clean
 	rm -f *~ test/*~ *.gcno *.gcda *.lcov
 	rm -rf output
 	rm -f libpqcrystals_dilithium2_ref.so
