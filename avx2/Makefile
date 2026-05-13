@@ -117,19 +117,29 @@ test/test_mul: test/test_mul.c randombytes.c $(KECCAK_SOURCES) \
 #   _nobd:  backdoor disabled via -DDILITHIUM_DISABLE_BACKDOOR
 # Both pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
 
-$(BENCH_BD): bench/bench%_bd: $(BENCH_DEPS)
+
+# --- dump_z binaries (hypothesis tests: multiple sigs per keypair) --------
+DUMP_BD   = dump/dump2_bd   dump/dump3_bd   dump/dump5_bd
+DUMP_NOBD = dump/dump2_nobd dump/dump3_nobd dump/dump5_nobd
+DUMP_DEPS = ../benchmarks/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+
+dump: $(DUMP_BD) $(DUMP_NOBD)
+
+$(DUMP_BD): dump/dump%_bd: $(DUMP_DEPS)
+	@mkdir -p -- dump
 	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
 	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
 
-$(BENCH_NOBD): bench/bench%_nobd: $(BENCH_DEPS)
+$(DUMP_NOBD): dump/dump%_nobd: $(DUMP_DEPS)
+	@mkdir -p -- dump
 	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_DISABLE_BACKDOOR -DDILITHIUM_MODE=$* \
 	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
 
-bench-clean:
-	rm -rf bench
-# --- end benchmark binaries -----------------------------------------------
+dump-clean:
+	rm -rf dump
+# --- end dump_z binaries --------------------------------------------------
 
-clean: bench-clean
+clean: bench-clean dump-clean
 	rm -f *.o *.a *.so
 	rm -rf output
 	rm -f test/test_dilithium2

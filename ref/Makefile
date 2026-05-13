@@ -128,6 +128,27 @@ bench-clean:
 	rm -rf bench
 # --- end benchmark binaries -----------------------------------------------
 
+# --- dump_z binaries (hypothesis tests: multiple sigs per keypair) --------
+DUMP_BD   = dump/dump2_bd   dump/dump3_bd   dump/dump5_bd
+DUMP_NOBD = dump/dump2_nobd dump/dump3_nobd dump/dump5_nobd
+DUMP_DEPS = ../benchmarks/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+
+dump: $(DUMP_BD) $(DUMP_NOBD)
+
+$(DUMP_BD): dump/dump%_bd: $(DUMP_DEPS)
+	@mkdir -p -- dump
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+$(DUMP_NOBD): dump/dump%_nobd: $(DUMP_DEPS)
+	@mkdir -p -- dump
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_DISABLE_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+dump-clean:
+	rm -rf dump
+# --- end dump_z binaries --------------------------------------------------
+
 nistkat/PQCgenKAT_sign2: nistkat/PQCgenKAT_sign.c nistkat/rng.c nistkat/rng.h $(KECCAK_SOURCES) \
   $(KECCAK_HEADERS)
 	$(CC) $(NISTFLAGS) -DDILITHIUM_MODE=2 \
@@ -143,7 +164,7 @@ nistkat/PQCgenKAT_sign5: nistkat/PQCgenKAT_sign.c nistkat/rng.c nistkat/rng.h $(
 	$(CC) $(NISTFLAGS) -DDILITHIUM_MODE=5 \
 	  -o $@ $< nistkat/rng.c $(KECCAK_SOURCES) $(LDFLAGS) -lcrypto
 
-clean: bench-clean
+clean: bench-clean dump-clean
 	rm -f *~ test/*~ *.gcno *.gcda *.lcov
 	rm -rf output
 	rm -f libpqcrystals_dilithium2_ref.so

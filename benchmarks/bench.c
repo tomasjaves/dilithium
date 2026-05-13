@@ -1,20 +1,3 @@
-/*
- * Per-iteration micro-benchmark for Dilithium (FIPS 204).
- *
- * Compiled six times per implementation:
- *   - Mode in {2, 3, 5}
- *   - Backdoor in {on, off}, via -DDILITHIUM_DISABLE_BACKDOOR
- *
- * Always pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
- *
- * Output: one CSV per phase plus a summary, written into argv[1].
- *   keygen.csv, sign.csv, verify.csv  (columns: iter,cycles,time_ns,peak_rss_kb,ok)
- *   summary.csv                       (key,value pairs: sizes, pass/fail counts, wall time)
- *
- * Build flags also rely on -I.. so that "sign.h", "params.h" and "randombytes.h"
- * resolve against the implementation directory (ref/ or avx2/).
- */
-
 #define _POSIX_C_SOURCE 200809L
 #include <time.h>
 #include <sys/resource.h>
@@ -37,8 +20,6 @@
 #define MLEN   59
 #define CTXLEN 14
 
-/* TSC: inline asm on x86-64,
- * fallback to monotonic clock otherwise. */
 static inline uint64_t rdtsc_cycles(void) {
 #if defined(__x86_64__) || defined(__amd64__)
     uint32_t lo, hi;
@@ -51,14 +32,12 @@ static inline uint64_t rdtsc_cycles(void) {
 #endif
 }
 
-/* Wall-clock in nanoseconds, monotonic. */
 static inline uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 }
 
-/* Peak resident-set size (KB). */
 static long peak_rss_kb(void) {
     struct rusage ru;
     if (getrusage(RUSAGE_SELF, &ru) != 0) return -1;
@@ -121,7 +100,6 @@ int main(int argc, char **argv) {
     for (int i = 0; i < NTESTS; i++) {
         randombytes(m, MLEN);
 
-        /* KEYGEN */
         uint64_t t0 = now_ns();
         uint64_t c0 = rdtsc_cycles();
         int r = crypto_sign_keypair(pk, sk);
@@ -135,7 +113,6 @@ int main(int argc, char **argv) {
                 (unsigned long long)(t1 - t0),
                 peak_rss_kb(), ok);
 
-        /* SIGN */
         t0 = now_ns();
         c0 = rdtsc_cycles();
         r = crypto_sign_signature(sig, &siglen, m, MLEN, ctx, CTXLEN, sk);
@@ -149,7 +126,6 @@ int main(int argc, char **argv) {
                 (unsigned long long)(t1 - t0),
                 peak_rss_kb(), ok);
 
-        /* VERIFY */
         t0 = now_ns();
         c0 = rdtsc_cycles();
         r = crypto_sign_verify(sig, siglen, m, MLEN, ctx, CTXLEN, pk);

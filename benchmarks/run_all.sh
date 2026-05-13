@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
-#
-# Build and run the 12 benchmark binaries:
-#   {ref, avx2} x Dilithium{2,3,5} x {con_puerta, sin_puerta}
-#
-# Each run produces keygen.csv, sign.csv, verify.csv and summary.csv inside
-# benchmarks/results/<impl>/Dilithium<mode>/<con_puerta|sin_puerta>/.
-#
-# Usage:
-#   bash benchmarks/run_all.sh                 # all 12 runs
-#   bash benchmarks/run_all.sh ref             # only ref
-#   bash benchmarks/run_all.sh avx2 5 bd       # only avx2 + Dilithium5 + con_puerta
-#
-# Tips for tighter measurements (Linux):
-#   - Pin the bench to one core:    taskset -c 3 bash run_all.sh
-#   - Disable turbo / set perf gov: sudo cpupower frequency-set -g performance
-#   - Close other workloads.
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,7 +9,6 @@ IMPLS_DEFAULT=("ref" "avx2")
 MODES_DEFAULT=("2" "3" "5")
 VARIANTS_DEFAULT=("bd" "nobd")
 
-# Parse very-permissive positional filters.
 IMPLS=("${IMPLS_DEFAULT[@]}")
 MODES=("${MODES_DEFAULT[@]}")
 VARIANTS=("${VARIANTS_DEFAULT[@]}")

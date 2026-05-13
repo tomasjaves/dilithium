@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-Aggregate Dilithium benchmark CSVs into a stats table and comparison plots.
-
-Reads:
-    <results_root>/<impl>/Dilithium<mode>/<con_puerta|sin_puerta>/
-        keygen.csv  sign.csv  verify.csv  summary.csv
-
-Writes:
-    <out_dir>/stats.csv -> consolidated table (mean / median / stdev /
-                                       95 % CI for cycles, time, RSS; failure
-                                       counts; sample sizes)
-    <out_dir>/plots/box_<impl>_D<mode>_<metric>.png ->  box per (impl, mode)
-    <out_dir>/plots/bar_time_ms.png -> grouped bar (con vs sin), errorbars = 95 % CI
-    <out_dir>/plots/bar_cycles.png -> same for cycles
-    <out_dir>/plots/bar_fail_rate.png -> failure rate per phase
-"""
 from __future__ import annotations
 
 import argparse
@@ -37,7 +21,7 @@ IMPLS = ("ref", "avx2")
 MODES = ("2", "3", "5")
 VARIANTS = (("bd", "with_bd"), ("nobd", "without_bd"))
 COLOR_NOBD = "#42A5F5"
-COLOR_BD = "#BBDEFB" 
+COLOR_BD = "#BBDEFB"
 
 
 @dataclass
@@ -68,7 +52,6 @@ def discover(results_root: Path) -> list[Run]:
 
 
 def ci95(samples: np.ndarray) -> tuple[float, float]:
-    """95 % confidence interval for the mean (Student-t)."""
     n = len(samples)
     if n < 2:
         return float("nan"), float("nan")
@@ -121,7 +104,6 @@ def summarize(runs: list[Run]) -> pd.DataFrame:
 
 
 def boxplot_compare(runs: list[Run], metric: str, ylabel: str, out_dir: Path) -> None:
-    """One figure per (impl, mode), boxplots of <metric> grouped by phase x backdoor."""
     out_dir.mkdir(parents=True, exist_ok=True)
     by_key: dict[tuple[str, str], list[Run]] = {}
     for r in runs:
@@ -147,7 +129,7 @@ def boxplot_compare(runs: list[Run], metric: str, ylabel: str, out_dir: Path) ->
             patch.set_facecolor(color)
         for median in bp['medians']:
             median.set_color("black")
-        
+
         titulo_metrica = "Tiempos" if metric == "time_ms" else "Ciclos"
         ax.set_title(f"Dispersión de {titulo_metrica} en Dilithium {mode} ({impl.upper()})")
         ax.set_ylabel(ylabel)
@@ -160,7 +142,6 @@ def boxplot_compare(runs: list[Run], metric: str, ylabel: str, out_dir: Path) ->
 
 def bar_with_ci(stats_df: pd.DataFrame, metric: str, lo: str, hi: str,
                 ylabel: str, out_path: Path) -> None:
-    """Grouped bar chart: each x is (impl/Dmode/phase); two bars (con vs sin)."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_df.empty:
         return
@@ -234,29 +215,28 @@ def fail_rate_chart(stats_df: pd.DataFrame, out_path: Path) -> None:
 
 
 def bar_total_time(stats_df: pd.DataFrame, out_path: Path) -> None:
-    """Grouped bar chart for TOTAL time (Keygen + Sign + Verify) per full run."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_df.empty:
         return
-    
+
     grouped = stats_df.groupby(["impl", "mode", "backdoor"], as_index=False)[["time_ms_mean", "cycles_mean"]].sum()
     grouped["x"] = grouped["impl"] + "/D" + grouped["mode"].astype(str)
-    
+
     xs = sorted(grouped["x"].unique())
     idx = np.arange(len(xs))
     width = 0.4
-    
+
     fig, ax = plt.subplots(figsize=(max(7, len(xs) * 0.8), 5))
-    
+
     colors = (COLOR_NOBD, COLOR_BD)
     for offset, bd, color in zip((-width / 2, width / 2), (False, True), colors):
         ys = []
         for x in xs:
             row = grouped[(grouped["x"] == x) & (grouped["backdoor"] == bd)]
             ys.append(float(row["time_ms_mean"].iloc[0]) if not row.empty else np.nan)
-        
+
         ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Comprometida" if bd else "Original"))
-        
+
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=9)
     ax.set_ylabel("Tiempo Total (ms)")
@@ -269,19 +249,18 @@ def bar_total_time(stats_df: pd.DataFrame, out_path: Path) -> None:
 
 
 def bar_rss(stats_df: pd.DataFrame, out_path: Path) -> None:
-    """Grouped bar chart for Peak RSS."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_df.empty:
         return
-    
+
     pivot = stats_df.copy()
     pivot["x"] = pivot["impl"] + "/D" + pivot["mode"].astype(str) + "/" + pivot["phase"]
     xs = sorted(pivot["x"].unique())
     idx = np.arange(len(xs))
     width = 0.4
-    
+
     fig, ax = plt.subplots(figsize=(max(8, len(xs) * 0.55), 5))
-    
+
     colors = (COLOR_NOBD, COLOR_BD)
     for offset, bd, color in zip((-width / 2, width / 2), (False, True), colors):
         ys = []
@@ -289,14 +268,14 @@ def bar_rss(stats_df: pd.DataFrame, out_path: Path) -> None:
             row = pivot[(pivot["x"] == x) & (pivot["backdoor"] == bd)]
             ys.append(float(row["peak_rss_kb_max"].iloc[0]) if not row.empty else np.nan)
         ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Comprometida" if bd else "Original"))
-        
+
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel("Peak RSS (KB)")
     ax.set_title("Pico Máximo de Memoria Residente por Fase")
     ax.legend()
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
-    
+
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)
@@ -306,10 +285,12 @@ def main(argv: list[str] | None = None) -> int:
     here = Path(__file__).resolve().parent
     repo_root = here.parent.parent
 
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Aggregate Dilithium benchmark CSVs into a stats table and comparison plots"
+    )
     parser.add_argument("--results", type=Path,
                         default=repo_root / "benchmarks" / "results",
-                        help="Root with <impl>/Dilithium<n>/<con|sin_puerta>/")
+                        help="Root directory with benchmark CSVs")
     parser.add_argument("--out", type=Path,
                         default=repo_root / "benchmarks" / "analysis",
                         help="Output directory for stats.csv and plots/")
