@@ -109,13 +109,6 @@ test/test_speed5: test/test_speed.c test/speed_print.c test/speed_print.h \
 test/test_mul: test/test_mul.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
 	$(CC) $(CFLAGS) -UDBENCH -o $@ $< randombytes.c $(KECCAK_SOURCES)
 
-# --- Benchmark binaries (TFG: con/sin puerta trasera) ---------------------
-# Static pattern rules: explicit target lists eliminate any pattern ambiguity
-# between *_bd and *_nobd suffixes.
-#   _bd:    backdoor enabled (default config.h)
-#   _nobd:  backdoor disabled via -DDILITHIUM_DISABLE_BACKDOOR
-# Both pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
-
 $(BENCH_BD): bench/bench%_bd: $(BENCH_DEPS)
 	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
 	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
@@ -128,7 +121,7 @@ bench-clean:
 	rm -rf bench
 # --- end benchmark binaries -----------------------------------------------
 
-# --- dump_z binaries (statistical tests: multiple sigs per keypair) -------
+# --- dump_z binaries (hypothesis tests: multiple sigs per keypair) -------
 DUMP_BD   = dump/dump2_bd   dump/dump3_bd   dump/dump5_bd
 DUMP_NOBD = dump/dump2_nobd dump/dump3_nobd dump/dump5_nobd
 DUMP_DEPS = ../hypothesis_tests/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)

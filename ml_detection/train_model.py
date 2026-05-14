@@ -1,18 +1,3 @@
-"""
-ML-based backdoor detection for CRYSTALS-Dilithium (ML-DSA).
-
-Trains a Random Forest classifier to distinguish between original and
-backdoored implementations based on LSB proportion vectors extracted
-from the z[0] polynomial coefficients across multiple signatures.
-
-Usage:
-    python3 train_model.py \
-        --original <impl>/ml_data/z_D2_nobd.csv \
-        --backdoor <impl>/ml_data/z_D2_bd.csv
-
-    python3 train_model.py --demo
-"""
-
 import argparse
 import sys
 import numpy as np
