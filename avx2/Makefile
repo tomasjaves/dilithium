@@ -11,7 +11,7 @@ HEADERS = align.h config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.
 KECCAK_SOURCES = $(SOURCES) fips202.c fips202x4.c f1600x4.S symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h fips202x4.h
 
-.PHONY: all shared bench bench-clean dump dump-clean clean
+.PHONY: all shared bench bench-clean dump dump-clean dataset dataset-clean clean
 
 all: \
   test/test_dilithium2 \
@@ -139,7 +139,28 @@ dump-clean:
 	rm -rf dump
 # --- end dump_z binaries --------------------------------------------------
 
-clean: bench-clean dump-clean
+# --- ML detection dataset binaries ----------------------------------------
+ML_BD   = ml_data/gen2_bd   ml_data/gen3_bd   ml_data/gen5_bd
+ML_NOBD = ml_data/gen2_nobd ml_data/gen3_nobd ml_data/gen5_nobd
+ML_DEPS = ../ml_detection/generate_dataset.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+
+dataset: $(ML_BD) $(ML_NOBD)
+
+$(ML_BD): ml_data/gen%_bd: $(ML_DEPS)
+	@mkdir -p -- ml_data
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+$(ML_NOBD): ml_data/gen%_nobd: $(ML_DEPS)
+	@mkdir -p -- ml_data
+	$(CC) $(CFLAGS) -I. -DDILITHIUM_SILENT_BACKDOOR -DDILITHIUM_DISABLE_BACKDOOR -DDILITHIUM_MODE=$* \
+	  -o $@ $< randombytes.c $(KECCAK_SOURCES)
+
+dataset-clean:
+	rm -rf ml_data
+# --- end ML detection dataset binaries ------------------------------------
+
+clean: bench-clean dump-clean dataset-clean
 	rm -f *.o *.a *.so
 	rm -rf output
 	rm -f test/test_dilithium2
