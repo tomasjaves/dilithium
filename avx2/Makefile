@@ -11,7 +11,7 @@ HEADERS = align.h config.h params.h api.h sign.h packing.h polyvec.h poly.h ntt.
 KECCAK_SOURCES = $(SOURCES) fips202.c fips202x4.c f1600x4.S symmetric-shake.c
 KECCAK_HEADERS = $(HEADERS) fips202.h fips202x4.h
 
-.PHONY: all shared bench bench-clean clean
+.PHONY: all shared bench bench-clean dump dump-clean clean
 
 all: \
   test/test_dilithium2 \
@@ -118,10 +118,10 @@ test/test_mul: test/test_mul.c randombytes.c $(KECCAK_SOURCES) \
 # Both pass -DDILITHIUM_SILENT_BACKDOOR to suppress status.c prints.
 
 
-# --- dump_z binaries (hypothesis tests: multiple sigs per keypair) --------
+# --- dump_z binaries (statistical tests: multiple sigs per keypair) -------
 DUMP_BD   = dump/dump2_bd   dump/dump3_bd   dump/dump5_bd
 DUMP_NOBD = dump/dump2_nobd dump/dump3_nobd dump/dump5_nobd
-DUMP_DEPS = ../benchmarks/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+DUMP_DEPS = ../hypothesis_tests/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
 
 dump: $(DUMP_BD) $(DUMP_NOBD)
 

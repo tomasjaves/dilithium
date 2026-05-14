@@ -128,10 +128,10 @@ bench-clean:
 	rm -rf bench
 # --- end benchmark binaries -----------------------------------------------
 
-# --- dump_z binaries (hypothesis tests: multiple sigs per keypair) --------
+# --- dump_z binaries (statistical tests: multiple sigs per keypair) -------
 DUMP_BD   = dump/dump2_bd   dump/dump3_bd   dump/dump5_bd
 DUMP_NOBD = dump/dump2_nobd dump/dump3_nobd dump/dump5_nobd
-DUMP_DEPS = ../benchmarks/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
+DUMP_DEPS = ../hypothesis_tests/dump_z.c randombytes.c $(KECCAK_SOURCES) $(KECCAK_HEADERS)
 
 dump: $(DUMP_BD) $(DUMP_NOBD)
 
