@@ -13,6 +13,10 @@ The backdoor alters signature generation so that the signer leaks the secret see
 - `benchmarks/`: timing, memory, and plotting scripts.
 - `hypothesis_tests/`: statistical detection pipeline.
 - `ml_detection/`: machine learning detection pipeline.
+- `Dockerfile`, `docker-compose.yml`, `.dockerignore`: containerised builds
+  of both implementations (see §4).
+- `Dockerfile.runtime`: slim multi-arch deployment image of `ref/` (≈120 MB,
+  no toolchain, no Python) intended for IoT targets — see §4.
 
 ## 2. Overview
 
@@ -34,13 +38,23 @@ The attack works in three steps:
 
 ## 3. Requirements
 
-- Linux or WSL on Windows.
-- `make` and `gcc`.
+Choose one path:
+
+**Native (Linux or WSL on Windows)**
+- `make` and `gcc` (AVX2 build requires an x86_64 CPU with AVX2 + POPCNT).
 - `python3` and `pip`.
+- `libssl-dev` for the `nistkat` target in `ref/`.
+
+**Docker (any host)**
+- Docker Engine 24+ and Docker Compose v2.
+- For the AVX2 image: x86_64 host with AVX2 + POPCNT support. The Compose
+  service pins `platform: linux/amd64`.
+
+See §4 for both build paths.
 
 ## 4. Compilation and Usage
 
-### Build the main binaries
+### Build the main binaries (native)
 
 Compile either implementation from its directory:
 
@@ -50,6 +64,159 @@ make
 ```
 
 This builds the normal test binaries, such as `test_dilithium2`.
+
+### Build the main binaries (Docker)
+
+Both implementations are also packaged as separate images via a single
+`Dockerfile` parameterised by the `IMPL` build arg. The repository ships a
+`docker-compose.yml` that defines two services: `ref` and `avx2`.
+
+```bash
+# Build both images (dilithium-ref:latest, dilithium-avx2:latest)
+docker compose build
+
+# Drop into a shell with everything ready to compile and run
+docker compose run --rm ref     # working dir: /src/ref
+docker compose run --rm avx2    # working dir: /src/avx2
+
+# Run a Makefile target directly
+docker compose run --rm ref  make speed
+docker compose run --rm avx2 make speed
+docker compose run --rm ref  make nistkat
+```
+
+The repository is bind-mounted into `/src`, so edits on the host are visible
+inside the container and any generated `bench/`, `dump/`, `ml_data/`, or
+`output/` directories persist on disk. The image already includes `gcc`,
+`make`, `libssl-dev`, and a Python virtualenv with the dependencies from
+`hypothesis_tests/requirements.txt`, `ml_detection/requirements.txt`, and
+`benchmarks/analysis/requirements.txt`, so the Python tooling described in
+§5–§7 also works inside the container without further setup.
+
+#### Security posture
+
+Both services run with defence-in-depth enabled by default:
+
+| Setting                       | Effect                                              |
+|-------------------------------|-----------------------------------------------------|
+| `user: "1000:1000"` + `USER`  | No root inside the container.                       |
+| `read_only: true`             | Root filesystem immutable.                          |
+| `tmpfs: /tmp`, `HOME=/tmp`    | Only `/tmp` (and the bind-mounted `/src`) writable. |
+| `cap_drop: [ALL]`             | All Linux capabilities dropped (`CapEff=0`).        |
+| `no-new-privileges:true`      | Setuid escalation blocked.                          |
+| `network_mode: none`          | No outbound network at runtime.                     |
+| `init: true`                  | Proper PID 1 / zombie reaping.                      |
+
+Overrides for the rare cases that need them:
+
+```bash
+# Need network (e.g. ad-hoc pip install) for a single invocation:
+docker compose run --rm --network bridge ref pip install --user <pkg>
+
+# Host UID/GID is not 1000 (Linux hosts only — Docker Desktop on Windows /
+# macOS maps bind-mount ownership automatically). Rebuild with matching IDs:
+docker compose build \
+    --build-arg APP_UID=$(id -u) \
+    --build-arg APP_GID=$(id -g)
+# Then edit `user: "<uid>:<gid>"` in docker-compose.yml to match.
+```
+
+#### Notes and caveats
+
+- The `avx2` service requires an x86_64 host with AVX2; on non-AMD64 hosts
+  the image must be run through emulation and the runtime CPU still needs
+  the relevant ISA extensions.
+- `avx2/` uses git symlinks pointing into `ref/`. They are stripped from the
+  build context via `.dockerignore` and recreated inside the image to avoid a
+  BuildKit symlink-handling bug on Windows hosts. The bind mount at runtime
+  exposes the original symlinks as-is.
+- The bind mount at `/src` overlays the binaries that `RUN make all` built
+  into the image. After `docker compose build`, run `make all` once inside
+  each container so the host filesystem ends up with usable binaries:
+
+  ```bash
+  docker compose run --rm ref  make all
+  docker compose run --rm avx2 make all
+  ```
+
+#### Slim runtime image for IoT deployment (`ref-slim`)
+
+The fat `dilithium-ref` / `dilithium-avx2` images carry the toolchain and the
+full Python analysis stack (≈1.3 GB), which is appropriate for development
+but oversized for an IoT target. A separate `Dockerfile.runtime` produces a
+**slim multi-arch runtime image (≈120 MB)** that contains only the compiled
+C binaries for the reference implementation. Enough to demonstrate the
+backdoor end-to-end on a low-resource device; the backdoor is active by
+default, identical to the fat image.
+
+What it ships (9 binaries under `/opt/dilithium/bin`):
+
+- `test_dilithium{2,3,5}`  — sign/verify smoke; prints recovered seed
+  (end-to-end backdoor proof)
+- `test_vectors{2,3,5}`    — KAT vector generation
+- `PQCgenKAT_sign{2,3,5}`  — NIST KAT generator (linked against `libcrypto`)
+
+What it omits:
+
+- The toolchain (`gcc`, `make`, `libssl-dev`).
+- The Python virtualenv and ML dependencies.
+- `test_speed{2,3,5}` and `test_mul`: rely on `rdtsc` (x86-only); cannot be
+  built for `linux/arm64` / `linux/arm/v7` and have no purpose on an IoT
+  target where you would not run the microbenchmarks.
+- `dump{2,3,5}_{bd,nobd}` and `gen{2,3,5}_{bd,nobd}` (statistical / ML
+  dataset generators): these are inputs to the Python analysis pipelines
+  (`hypothesis_tests.py`, `train_model.py`) which live in the fat image, so
+  pairing them with the slim runtime would force a split workflow without
+  saving anything. Use the fat image when you need the §6/§7 experiments.
+
+Single-arch build (current host architecture):
+
+```bash
+docker compose build ref-slim
+# or
+docker build -f Dockerfile.runtime -t dilithium-ref-slim:latest .
+```
+
+Multi-arch build (`amd64` + `arm64` + `armv7`) via Buildx, pushed to a registry:
+
+```bash
+docker buildx create --use --name dilithium-mab
+docker buildx build -f Dockerfile.runtime \
+    --platform linux/amd64,linux/arm64,linux/arm/v7 \
+    -t <registry>/dilithium-ref-slim:latest --push .
+```
+
+Offline deployment (no registry — build a single-arch tarball on the dev
+machine, `scp` to the IoT target, load locally):
+
+```bash
+# On the PC — pick the target arch (linux/arm64 for RPi 4/5, Jetson Nano;
+# linux/arm/v7 for RPi Zero / RPi 2)
+docker buildx build -f Dockerfile.runtime --platform linux/arm64 \
+    -t dilithium-ref-slim:arm64 --output type=docker .
+docker save dilithium-ref-slim:arm64 | gzip > slim-arm64.tar.gz
+scp slim-arm64.tar.gz pi@raspberrypi.local:~
+
+# On the IoT device
+gunzip -c slim-arm64.tar.gz | docker load
+docker run --rm dilithium-ref-slim:arm64 test_dilithium2
+```
+
+Run a binary directly. The image self-documents under `docker run` with no
+args (lists `/opt/dilithium/bin`); override with the binary name:
+
+```bash
+docker run --rm dilithium-ref-slim                       # lists binaries
+docker run --rm dilithium-ref-slim test_dilithium2       # sign/recover smoke
+docker run --rm -v "$PWD/out:/tmp" dilithium-ref-slim \
+    PQCgenKAT_sign2                                       # KAT into ./out
+```
+
+The slim image keeps the same defence-in-depth posture as the fat one
+(non-root `dilithium` user, no shell home, `libssl3` as the only runtime
+dependency) and the `ref-slim` Compose service inherits the same hardening
+anchor (`read_only`, `cap_drop: ALL`, `no-new-privileges`, `network_mode:
+none`).
 
 ### Backdoor flags
 

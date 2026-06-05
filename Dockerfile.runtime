@@ -1,0 +1,108 @@
+# syntax=docker/dockerfile:1.7
+#
+# Slim multi-arch runtime image for the reference Dilithium implementation.
+# Carries only the compiled C binaries — no toolchain, no Python, no source.
+# Intended for deployment on IoT-class devices (e.g. Raspberry Pi 4/5, Jetson,
+# x86 edge gateways) so the experiments described in §6 and §7 of the README
+# can be reproduced end-to-end on a low-resource target.
+#
+# Builds:
+#   - test_dilithium{2,3,5}      : sign/verify smoke tests for each NIST level
+#                                  (prints the recovered seed, demonstrating
+#                                  the backdoor end-to-end).
+#   - test_vectors{2,3,5}        : KAT vector generation.
+#   - PQCgenKAT_sign{2,3,5}      : NIST KAT generator (libcrypto).
+#
+# Skipped:
+#   - test_speed{2,3,5}, test_mul, bench{2,3,5}_bd/nobd : require x86 rdtsc.
+#   - dump{2,3,5}_bd/nobd, gen{2,3,5}_bd/nobd           : statistical / ML
+#                                  dataset generators. Used together with the
+#                                  Python analysis (hypothesis_tests.py,
+#                                  train_model.py) which lives in the fat
+#                                  image; pointless to ship them in the slim
+#                                  runtime image.
+#
+# Single-arch build (current host architecture):
+#   docker build -f Dockerfile.runtime -t dilithium-ref-slim:latest .
+#
+# Multi-arch build (requires buildx + a registry to push to):
+#   docker buildx create --use --name dilithium-mab
+#   docker buildx build -f Dockerfile.runtime \
+#       --platform linux/amd64,linux/arm64,linux/arm/v7 \
+#       -t <registry>/dilithium-ref-slim:latest --push .
+
+# ---------------------------------------------------------------------------
+# Stage 1: builder — gcc + libssl-dev compile every C binary that is portable
+# across the supported architectures.
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        build-essential \
+        make \
+        libssl-dev \
+        ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY ref/ /build/ref/
+
+WORKDIR /build/ref
+# `make all`     : test_dilithium{2,3,5} + test_vectors{2,3,5}
+# `make nistkat` : PQCgenKAT_sign{2,3,5} (needs libcrypto, linked dynamically)
+RUN make all \
+ && make nistkat \
+ && strip \
+        test/test_dilithium2 test/test_dilithium3 test/test_dilithium5 \
+        test/test_vectors2   test/test_vectors3   test/test_vectors5 \
+        nistkat/PQCgenKAT_sign2 nistkat/PQCgenKAT_sign3 nistkat/PQCgenKAT_sign5
+
+# ---------------------------------------------------------------------------
+# Stage 2: runtime — minimal Debian slim with only the dynamic deps.
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime libraries only:
+#   libssl3 : libcrypto.so.3 for PQCgenKAT_sign*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libssl3 \
+ && rm -rf /var/lib/apt/lists/* \
+ && apt-get clean
+
+# Non-root user. Same UID/GID convention as the fat image.
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd --system --gid ${APP_GID} dilithium \
+ && useradd  --system --uid ${APP_UID} --gid ${APP_GID} \
+             --home-dir /home/dilithium --create-home --shell /sbin/nologin \
+             dilithium
+
+# Stage every binary flat under /opt/dilithium/bin.
+RUN install -d -o dilithium -g dilithium /opt/dilithium/bin
+
+COPY --from=builder --chown=dilithium:dilithium \
+     /build/ref/test/test_dilithium2 \
+     /build/ref/test/test_dilithium3 \
+     /build/ref/test/test_dilithium5 \
+     /build/ref/test/test_vectors2 \
+     /build/ref/test/test_vectors3 \
+     /build/ref/test/test_vectors5 \
+     /build/ref/nistkat/PQCgenKAT_sign2 \
+     /build/ref/nistkat/PQCgenKAT_sign3 \
+     /build/ref/nistkat/PQCgenKAT_sign5 \
+     /opt/dilithium/bin/
+
+ENV PATH=/opt/dilithium/bin:${PATH}
+
+USER dilithium
+WORKDIR /home/dilithium
+
+# Self-documenting default: list available binaries.
+# Override at run time, e.g. `docker run --rm dilithium-ref-slim test_dilithium2`.
+CMD ["sh", "-c", "ls /opt/dilithium/bin"]
