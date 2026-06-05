@@ -1,0 +1,91 @@
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# Python caches and bytecode
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Compiled C artefacts
+**/*.o
+**/*.a
+**/*.so
+**/*.dylib
+
+# Per-impl build output dirs
+ref/bench/
+ref/dump/
+ref/ml_data/
+ref/output/
+avx2/bench/
+avx2/dump/
+avx2/ml_data/
+avx2/output/
+
+# Test/speed binaries (no extension on Linux)
+ref/test/test_dilithium2
+ref/test/test_dilithium3
+ref/test/test_dilithium5
+ref/test/test_vectors2
+ref/test/test_vectors3
+ref/test/test_vectors5
+ref/test/test_speed2
+ref/test/test_speed3
+ref/test/test_speed5
+ref/test/test_mul
+avx2/test/test_dilithium2
+avx2/test/test_dilithium3
+avx2/test/test_dilithium5
+avx2/test/test_vectors2
+avx2/test/test_vectors3
+avx2/test/test_vectors5
+avx2/test/test_speed2
+avx2/test/test_speed3
+avx2/test/test_speed5
+avx2/test/test_mul
+ref/nistkat/PQCgenKAT_sign2
+ref/nistkat/PQCgenKAT_sign3
+ref/nistkat/PQCgenKAT_sign5
+
+# Generated datasets / analysis output
+benchmarks/results/*.csv
+hypothesis_tests/*.csv
+hypothesis_tests/*.json
+hypothesis_tests/*.txt
+!hypothesis_tests/requirements.txt
+ml_detection/*.csv
+ml_detection/*.joblib
+ml_detection/*.pkl
+
+# Misc
+SHA256SUMS
+
+# avx2/ symlinks into ref/ — BuildKit on Windows hosts fails to transfer these
+# during context load ("invalid file request"). Skip them here; the Dockerfile
+# recreates the symlinks inside the image.
+avx2/fips202.c
+avx2/fips202.h
+avx2/packing.c
+avx2/packing.h
+avx2/params.h
+avx2/randombytes.c
+avx2/randombytes.h
+avx2/sign.h
+avx2/status.c
+avx2/status.h
+avx2/symmetric-shake.c
+avx2/transform.c
+avx2/transform.h
+avx2/test/cpucycles.c
+avx2/test/cpucycles.h
+avx2/test/speed_print.c
+avx2/test/speed_print.h
+avx2/test/test_dilithium.c
+avx2/test/test_mul.c
+avx2/test/test_speed.c
+

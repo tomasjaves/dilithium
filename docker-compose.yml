@@ -1,0 +1,61 @@
+x-hardening: &hardening
+  user: "1000:1000"
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  environment:
+    HOME: /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  network_mode: none
+  tty: true
+  stdin_open: true
+  command: bash
+
+services:
+  ref:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        IMPL: ref
+    image: dilithium-ref:latest
+    container_name: dilithium-ref
+    working_dir: /src/ref
+    volumes:
+      - .:/src
+
+  avx2:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        IMPL: avx2
+    # AVX2 build uses -march=native + -mavx2 + -mpopcnt: must run on x86_64
+    # with AVX2 support. platform pin keeps Buildx honest on ARM hosts.
+    platform: linux/amd64
+    image: dilithium-avx2:latest
+    container_name: dilithium-avx2
+    working_dir: /src/avx2
+    volumes:
+      - .:/src
+
+  # Slim multi-arch deployment image for ref/. No toolchain, no Python, no
+  # source — just the compiled C binaries under /opt/dilithium/bin/. Intended
+  # for IoT-class targets; see Dockerfile.runtime for buildx multi-arch usage.
+  ref-slim:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: Dockerfile.runtime
+    image: dilithium-ref-slim:latest
+    container_name: dilithium-ref-slim
+    working_dir: /tmp
+    # No bind mount: image is self-contained. Override on the CLI if you need
+    # to capture KAT output:
+    #   docker compose run --rm -v "$PWD/out:/tmp" ref-slim PQCgenKAT_sign2
