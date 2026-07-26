@@ -118,11 +118,14 @@ def boxplot_compare(runs: list[Run], metric: str, ylabel: str, out_dir: Path) ->
                     continue
                 ok = hits[0].df[hits[0].df["ok"] == 1]
                 data.append(ok[metric].to_numpy())
-                labels.append(f"{phase}\n{'Comprometida' if bd else 'Original'}")
+                labels.append(f"{phase}\n{'Backdoored' if bd else 'Original'}")
         if not data:
             continue
         fig, ax = plt.subplots(figsize=(9, 5))
-        bp = ax.boxplot(data, labels=labels, showfliers=False, patch_artist=True)
+        try:
+            bp = ax.boxplot(data, tick_labels=labels, showfliers=False, patch_artist=True)
+        except TypeError:
+            bp = ax.boxplot(data, labels=labels, showfliers=False, patch_artist=True)
         colors = [COLOR_NOBD, COLOR_BD] * (len(data) // 2)
         if len(data) % 2 != 0: colors.append(COLOR_NOBD)
         for patch, color in zip(bp['boxes'], colors):
@@ -130,8 +133,8 @@ def boxplot_compare(runs: list[Run], metric: str, ylabel: str, out_dir: Path) ->
         for median in bp['medians']:
             median.set_color("black")
 
-        titulo_metrica = "Tiempos" if metric == "time_ms" else "Ciclos"
-        ax.set_title(f"Dispersión de {titulo_metrica} en Dilithium {mode} ({impl.upper()})")
+        metric_title = "Time" if metric == "time_ms" else "Cycles"
+        ax.set_title(f"{metric_title} Distribution for Dilithium {mode} ({impl.upper()})")
         ax.set_ylabel(ylabel)
         ax.grid(True, axis="y", linestyle=":", alpha=0.5)
         ax.ticklabel_format(style="plain", axis="y")
@@ -169,12 +172,12 @@ def bar_with_ci(stats_df: pd.DataFrame, metric: str, lo: str, hi: str,
                 errs_hi.append(float(row[hi].iloc[0]) - m)
         ax.bar(idx + offset, ys, width=width, color=color,
                yerr=[errs_lo, errs_hi], capsize=3, edgecolor="black", linewidth=0.5,
-               label=("Comprometida" if bd else "Original"))
+               label=("Backdoored" if bd else "Original"))
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel(ylabel)
-    titulo_metrica = "Tiempos" if "time" in metric else "Ciclos"
-    ax.set_title(f"Media de {titulo_metrica} por Fase (con IC del 95 %)")
+    metric_title = "Time" if "time" in metric else "Cycles"
+    ax.set_title(f"Mean {metric_title} per Phase (with 95% CI)")
     ax.legend()
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
     ax.ticklabel_format(style="plain", axis="y")
@@ -202,11 +205,11 @@ def fail_rate_chart(stats_df: pd.DataFrame, out_path: Path) -> None:
             row = pivot[(pivot["x"] == x) & (pivot["backdoor"] == bd)]
             ys.append(float(row["fail_rate"].iloc[0]) if not row.empty else np.nan)
         ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5,
-               label=("Comprometida" if bd else "Original"))
+               label=("Backdoored" if bd else "Original"))
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=8)
-    ax.set_ylabel("Tasa de fallo")
-    ax.set_title("Tasa de Errores por Fase (10 000 ejecuciones)")
+    ax.set_ylabel("Failure rate")
+    ax.set_title("Failure Rate per Phase (10,000 runs)")
     ax.legend()
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
     fig.tight_layout()
@@ -235,12 +238,12 @@ def bar_total_time(stats_df: pd.DataFrame, out_path: Path) -> None:
             row = grouped[(grouped["x"] == x) & (grouped["backdoor"] == bd)]
             ys.append(float(row["time_ms_mean"].iloc[0]) if not row.empty else np.nan)
 
-        ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Comprometida" if bd else "Original"))
+        ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Backdoored" if bd else "Original"))
 
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=9)
-    ax.set_ylabel("Tiempo Total (ms)")
-    ax.set_title("Tiempo Medio Acumulado del Ciclo Completo")
+    ax.set_ylabel("Total Time (ms)")
+    ax.set_title("Mean Cumulative Time of Full Cycle")
     ax.legend()
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
     fig.tight_layout()
@@ -267,12 +270,12 @@ def bar_rss(stats_df: pd.DataFrame, out_path: Path) -> None:
         for x in xs:
             row = pivot[(pivot["x"] == x) & (pivot["backdoor"] == bd)]
             ys.append(float(row["peak_rss_kb_max"].iloc[0]) if not row.empty else np.nan)
-        ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Comprometida" if bd else "Original"))
+        ax.bar(idx + offset, ys, width=width, color=color, edgecolor="black", linewidth=0.5, label=("Backdoored" if bd else "Original"))
 
     ax.set_xticks(idx)
     ax.set_xticklabels(xs, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel("Peak RSS (KB)")
-    ax.set_title("Pico Máximo de Memoria Residente por Fase")
+    ax.set_title("Peak Resident Memory per Phase")
     ax.legend()
     ax.grid(True, axis="y", linestyle=":", alpha=0.5)
 
@@ -308,12 +311,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote {stats_csv}  ({len(stats_df)} rows)")
 
     plots_dir = args.out / "plots"
-    boxplot_compare(runs, "cycles", "Ciclos", plots_dir)
-    boxplot_compare(runs, "time_ms", "Tiempo (ms)", plots_dir)
+    boxplot_compare(runs, "cycles", "Cycles", plots_dir)
+    boxplot_compare(runs, "time_ms", "Time (ms)", plots_dir)
     bar_with_ci(stats_df, "time_ms_mean", "time_ms_ci95_lo", "time_ms_ci95_hi",
-                "Tiempo (ms)", plots_dir / "bar_time_ms.png")
+                "Time (ms)", plots_dir / "bar_time_ms.png")
     bar_with_ci(stats_df, "cycles_mean", "cycles_ci95_lo", "cycles_ci95_hi",
-                "Ciclos", plots_dir / "bar_cycles.png")
+                "Cycles", plots_dir / "bar_cycles.png")
     bar_total_time(stats_df, plots_dir / "bar_total_time_ms.png")
     bar_rss(stats_df, plots_dir / "bar_rss_kb.png")
     fail_rate_chart(stats_df, plots_dir / "bar_fail_rate.png")
