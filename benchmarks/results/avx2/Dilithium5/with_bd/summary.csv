@@ -11,5 +11,5 @@ sign_ok,10000
 sign_fail,0
 verify_ok,10000
 verify_fail,0
-peak_rss_kb,1664
-wall_time_ns,6898979834
+peak_rss_kb,1408
+wall_time_ns,5841027774

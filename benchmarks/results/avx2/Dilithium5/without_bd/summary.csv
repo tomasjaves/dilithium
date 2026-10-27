@@ -12,4 +12,4 @@ sign_fail,0
 verify_ok,10000
 verify_fail,0
 peak_rss_kb,1536
-wall_time_ns,5641028740
+wall_time_ns,4533120962
