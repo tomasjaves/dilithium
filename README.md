@@ -1,8 +1,22 @@
-# Dilithium - Kleptographic Backdoor Implementation
+# Dilithium — Kleptographic Backdoor Implementation
 
-This repository contains a modified implementation of Dilithium (standardized as FIPS 204) that demonstrates a kleptographic backdoor in the signing process. It includes both the reference implementation (`ref/`) and the AVX2-optimized implementation (`avx2/`), plus benchmarking and detection tooling.
+> **⚠️ Research artifact — not for production use.**
+> This repository intentionally ships a working kleptographic backdoor, **enabled by
+> default** (including in the slim IoT runtime image). It exists solely to develop and
+> evaluate detection methods. Do not deploy any binary built from this repository in a
+> real system, and do not use it to generate signatures you intend to trust.
 
-The backdoor alters signature generation so that the signer leaks the secret seed through the least significant bits of the first polynomial in `z`. The signature remains mathematically valid because the implementation restores the manipulated values before verification.
+This repository implements a kleptographic backdoor in Dilithium (standardized as
+FIPS 204), and then provides methods to detect it: statistical tests and machine
+learning that tell backdoored signatures apart from honest ones. See §6 (statistical
+detection) and §7 (ML-based detection).
+
+The backdoored signer ships in two forms — the reference implementation (`ref/`) and
+the AVX2-optimized implementation (`avx2/`) — alongside benchmarking and detection
+tooling. It alters signature generation so that the signer leaks the secret seed
+through the least significant bits of the first polynomial in `z`. The signature
+remains mathematically valid because the implementation restores the manipulated values
+before verification.
 
 ---
 
