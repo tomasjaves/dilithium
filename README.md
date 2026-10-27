@@ -8,8 +8,8 @@
 
 This repository implements a kleptographic backdoor in Dilithium (standardized as
 FIPS 204), and then provides methods to detect it: statistical tests and machine
-learning that tell backdoored signatures apart from honest ones. See §6 (statistical
-detection) and §7 (ML-based detection).
+learning that tell backdoored signatures apart from honest ones. See §7 (statistical
+detection) and §8 (ML-based detection).
 
 The backdoored signer ships in two forms — the reference implementation (`ref/`) and
 the AVX2-optimized implementation (`avx2/`) — alongside benchmarking and detection
@@ -28,9 +28,9 @@ before verification.
 - `hypothesis_tests/`: statistical detection pipeline.
 - `ml_detection/`: machine learning detection pipeline.
 - `Dockerfile`, `docker-compose.yml`, `.dockerignore`: containerised builds
-  of both implementations (see §4).
+  of both implementations (see §5).
 - `Dockerfile.runtime`: slim multi-arch deployment image of `ref/` (≈120 MB,
-  no toolchain, no Python) intended for IoT targets — see §4.
+  no toolchain, no Python) intended for IoT targets — see §5.
 
 ## 2. Overview
 
@@ -50,7 +50,7 @@ The attack works in three steps:
 
 > **Note:** When the backdoor is enabled, Dilithium runs in deterministic mode to keep the attack stable.
 
-## 3. Requirements
+## 4. Requirements
 
 Choose one path:
 
@@ -64,9 +64,9 @@ Choose one path:
 - For the AVX2 image: x86_64 host with AVX2 + POPCNT support. The Compose
   service pins `platform: linux/amd64`.
 
-See §4 for both build paths.
+See §5 for both build paths.
 
-## 4. Compilation and Usage
+## 5. Compilation and Usage
 
 ### Build the main binaries (native)
 
@@ -105,7 +105,7 @@ inside the container and any generated `bench/`, `dump/`, `ml_data/`, or
 `make`, `libssl-dev`, and a Python virtualenv with the dependencies from
 `hypothesis_tests/requirements.txt`, `ml_detection/requirements.txt`, and
 `benchmarks/analysis/requirements.txt`, so the Python tooling described in
-§5–§7 also works inside the container without further setup.
+§6–§8 also works inside the container without further setup.
 
 #### Security posture
 
@@ -181,7 +181,7 @@ What it omits:
   dataset generators): these are inputs to the Python analysis pipelines
   (`hypothesis_tests.py`, `train_model.py`) which live in the fat image, so
   pairing them with the slim runtime would force a split workflow without
-  saving anything. Use the fat image when you need the §6/§7 experiments.
+  saving anything. Use the fat image when you need the §7/§8 experiments.
 
 Single-arch build (current host architecture):
 
@@ -248,7 +248,7 @@ CFLAGS="-DDILITHIUM_SILENT_BACKDOOR" make
 
 You can also disable it permanently by commenting out `#define DILITHIUM_ENABLE_BACKDOOR` in `ref/config.h` and `avx2/config.h`.
 
-## 5. Benchmarking
+## 6. Benchmarking
 
 The repository includes scripts to measure the impact of the backdoor across Dilithium modes 2, 3, and 5, in both the reference and AVX2 implementations.
 
@@ -308,7 +308,7 @@ Each binary writes raw CSV files for key generation, signing, and verification. 
 - `plots/bar_rss_kb.png`
 - `plots/box_<impl>_D<mode>_<metric>.png`
 
-## 6. Statistical Detection
+## 7. Statistical Detection
 
 The `hypothesis_tests/` directory contains a statistical pipeline that detects the backdoor by analyzing multiple signatures from the same keypair.
 
@@ -371,7 +371,7 @@ Demo mode:
 python3 hypothesis_tests/hypothesis_tests.py --demo
 ```
 
-## 7. ML-Based Detection
+## 8. ML-Based Detection
 
 The `ml_detection/` directory contains a machine learning pipeline that trains a Random Forest classifier to distinguish between original and backdoored implementations using the LSB distribution of `z[0]`.
 
