@@ -14,9 +14,10 @@ detection) and §8 (ML-based detection).
 The backdoored signer ships in two forms — the reference implementation (`ref/`) and
 the AVX2-optimized implementation (`avx2/`) — alongside benchmarking and detection
 tooling. It alters signature generation so that the signer leaks the secret seed
-through the least significant bits of the first polynomial in `z`. The signature
-remains mathematically valid because the implementation restores the manipulated values
-before verification.
+through the least significant bits of the first polynomial in `z`. The emitted
+signatures are not valid FIPS 204 signatures: an unmodified verifier rejects them.
+Only the compromised verifier built from this repository accepts them, because it
+restores the manipulated values before verifying.
 
 ---
 
@@ -44,9 +45,9 @@ The project is organized around three goals:
 
 The attack works in three steps:
 
-1. During signing, the implementation modifies the least significant bits of `z->vec[0]` to encode bits of the secret seed.
-2. An attacker can recover the hidden seed directly from the manipulated signature.
-3. Before verification, an internal `restore` routine reconstructs the honest signature so the standard verifier still accepts it.
+1. During signing, the implementation modifies the least significant bits of `z->vec[0]` to encode the bits of the secret seed.
+2. Anyone who obtains a manipulated signature can read the hidden seed from it, without any secret, and rebuild the private key.
+3. Before verifying, the compromised verifier runs an internal `restore` routine that reconstructs the original `z`, so it accepts the signature. An unmodified FIPS 204 verifier lacks this step and rejects it.
 
 > **Note:** When the backdoor is enabled, Dilithium runs in deterministic mode to keep the attack stable.
 
